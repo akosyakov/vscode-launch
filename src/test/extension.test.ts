@@ -2,6 +2,11 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
+const defaultConfiguration = {
+    "configurations": [],
+    "compounds": []
+};
+
 const validConfiguration = {
     "name": "Launch Program",
     "program": "${file}",
@@ -42,10 +47,7 @@ const settingsPath = rootUri.fsPath + '/.vscode/settings.json';
 
 testSuite({
     name: 'No Preferences',
-    expectation: {
-        "configurations": [],
-        "compounds": []
-    }
+    expectation: defaultConfiguration
 });
 
 testLaunchAndSettingsSuite({
@@ -259,6 +261,21 @@ function testSuite({
         test('rootUri', () => {
             const config = vscode.workspace.getConfiguration('launch', rootUri);
             assert.deepEqual(expectation, JSON.parse(JSON.stringify(config)));
+        });
+
+        test('inspect', () => {
+            const config = vscode.workspace.getConfiguration();
+            const inspect = config.inspect('launch');
+            const inspectExpectation = {
+                key: 'launch',
+                defaultValue: defaultConfiguration,
+                globalValue: defaultConfiguration,
+            };
+            const workspaceValue = launch || settings && settings.launch;
+            if (workspaceValue !== undefined) {
+                Object.assign(inspectExpectation, { workspaceValue });
+            }
+            assert.deepEqual(inspectExpectation, JSON.parse(JSON.stringify(inspect)));
         });
 
     });
