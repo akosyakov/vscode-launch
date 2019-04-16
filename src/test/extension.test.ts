@@ -268,8 +268,7 @@ function testSuite({
             const inspect = config.inspect('launch');
             const inspectExpectation = {
                 key: 'launch',
-                defaultValue: defaultConfiguration,
-                globalValue: defaultConfiguration,
+                defaultValue: defaultConfiguration
             };
             const workspaceValue = launch || settings && settings.launch;
             if (workspaceValue !== undefined) {
@@ -283,8 +282,7 @@ function testSuite({
             const inspect = config.inspect('configurations');
             const inspectExpectation = {
                 key: 'launch.configurations',
-                defaultValue: defaultConfiguration.configurations,
-                globalValue: defaultConfiguration.configurations,
+                defaultValue: defaultConfiguration.configurations
             };
             const value = launch || settings && settings.launch;
             const configurations = !!value && 'configurations' in value ? value.configurations : undefined;
@@ -302,8 +300,7 @@ function testSuite({
             const inspect = config.inspect('compounds');
             const inspectExpectation = {
                 key: 'launch.compounds',
-                defaultValue: defaultConfiguration.compounds,
-                globalValue: defaultConfiguration.compounds,
+                defaultValue: defaultConfiguration.compounds
             };
             const value = launch || settings && settings.launch;
             const compounds = !!value && 'compounds' in value ? value.compounds : undefined;
