@@ -278,6 +278,44 @@ function testSuite({
             assert.deepEqual(inspectExpectation, JSON.parse(JSON.stringify(inspect)));
         });
 
+        test('inspect configurations', () => {
+            const config = vscode.workspace.getConfiguration('launch', rootUri);
+            const inspect = config.inspect('configurations');
+            const inspectExpectation = {
+                key: 'launch.configurations',
+                defaultValue: defaultConfiguration.configurations,
+                globalValue: defaultConfiguration.configurations,
+            };
+            const value = launch || settings && settings.launch;
+            const configurations = !!value && 'configurations' in value ? value.configurations : undefined;
+            if (configurations !== undefined) {
+                Object.assign(inspectExpectation, {
+                    workspaceValue: configurations,
+                    workspaceFolderValue: configurations
+                });
+            }
+            assert.deepEqual(inspectExpectation, JSON.parse(JSON.stringify(inspect)));
+        });
+
+        test('inspect compounds', () => {
+            const config = vscode.workspace.getConfiguration('launch', rootUri);
+            const inspect = config.inspect('compounds');
+            const inspectExpectation = {
+                key: 'launch.compounds',
+                defaultValue: defaultConfiguration.compounds,
+                globalValue: defaultConfiguration.compounds,
+            };
+            const value = launch || settings && settings.launch;
+            const compounds = !!value && 'compounds' in value ? value.compounds : undefined;
+            if (compounds !== undefined) {
+                Object.assign(inspectExpectation, {
+                    workspaceValue: compounds,
+                    workspaceFolderValue: compounds
+                });
+            }
+            assert.deepEqual(inspectExpectation, JSON.parse(JSON.stringify(inspect)));
+        });
+
     });
 
 };
