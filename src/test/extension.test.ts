@@ -115,6 +115,19 @@ testLaunchAndSettingsSuite({
 });
 
 testLaunchAndSettingsSuite({
+    name: 'Completely Bogus Conf',
+    launch: {
+        "version": "0.2.0",
+        "configurations": { 'valid': validConfiguration, 'bogus': bogusConfiguration }
+    },
+    expectation: {
+        "version": "0.2.0",
+        "configurations": { 'valid': validConfiguration, 'bogus': bogusConfiguration },
+        "compounds": []
+    }
+});
+
+testLaunchAndSettingsSuite({
     name: 'Valid Compound',
     launch: {
         "version": "0.2.0",
