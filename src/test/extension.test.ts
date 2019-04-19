@@ -127,6 +127,62 @@ testLaunchAndSettingsSuite({
     }
 });
 
+const arrayBogusLaunch = [
+    "version", "0.2.0",
+    "configurations", { 'valid': validConfiguration, 'bogus': bogusConfiguration }
+];
+testSuite({
+    name: 'Array Bogus Conf Launch Configuration',
+    launch: arrayBogusLaunch,
+    expectation: {
+        "0": "version",
+        "1": "0.2.0",
+        "2": "configurations",
+        "3": { 'valid': validConfiguration, 'bogus': bogusConfiguration },
+        "compounds": [],
+        "configurations": []
+    }
+});
+testSuite({
+    name: 'Array Bogus Conf Settings Configuration',
+    settings: {
+        "launch": arrayBogusLaunch
+    },
+    expectation: {}
+});
+
+testSuite({
+    name: 'Null Bogus Conf Launch Configuration',
+    launch: null,
+    expectation: {
+        "compounds": [],
+        "configurations": []
+    }
+});
+testSuite({
+    name: 'Null Bogus Conf Settings Configuration',
+    settings: {
+        "launch": null
+    },
+    expectation: {}
+});
+
+testLaunchAndSettingsSuite({
+    name: 'Array Bogus Conf',
+    launch: [
+        "version", "0.2.0",
+        "configurations", { 'valid': validConfiguration, 'bogus': bogusConfiguration }
+    ],
+    expectation: {
+        "0": "version",
+        "1": "0.2.0",
+        "2": "configurations",
+        "3": { 'valid': validConfiguration, 'bogus': bogusConfiguration },
+        "compounds": [],
+        "configurations": []
+    }
+});
+
 testLaunchAndSettingsSuite({
     name: 'Valid Compound',
     launch: {
