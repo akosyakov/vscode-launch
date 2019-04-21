@@ -40,6 +40,10 @@ const bogusCompound2 = {
         "Launch Program 2"
     ]
 };
+const validLaunch = {
+    configurations: [validConfiguration, validConfiguration2],
+    compounds: [validCompound]
+};
 
 const rootUri = vscode.workspace.workspaceFolders![0].uri;
 const launchPath = rootUri.fsPath + '/.vscode/launch.json';
@@ -168,22 +172,6 @@ testSuite({
 });
 
 testLaunchAndSettingsSuite({
-    name: 'Array Bogus Conf',
-    launch: [
-        "version", "0.2.0",
-        "configurations", { 'valid': validConfiguration, 'bogus': bogusConfiguration }
-    ],
-    expectation: {
-        "0": "version",
-        "1": "0.2.0",
-        "2": "configurations",
-        "3": { 'valid': validConfiguration, 'bogus': bogusConfiguration },
-        "compounds": [],
-        "configurations": []
-    }
-});
-
-testLaunchAndSettingsSuite({
     name: 'Valid Compound',
     launch: {
         "version": "0.2.0",
@@ -281,7 +269,7 @@ function testSuite({
             return r;
         };
 
-        setup(async () => {
+        setup(async function () {
             const whenDidChangeLaunchConfiguration = new Promise(resolve => vscode.workspace.onDidChangeConfiguration(e => {
                 if (e.affectsConfiguration('launch')) {
                     resolve();
@@ -301,14 +289,14 @@ function testSuite({
             }
         });
 
-        teardown(async () => {
+        teardown(async function () {
             const whenDidChangeLaunchConfiguration = new Promise(resolve => vscode.workspace.onDidChangeConfiguration(e => {
                 if (e.affectsConfiguration('launch')) {
                     resolve();
                 }
             }));
             if (cleanUp()) {
-                await whenDidChangeLaunchConfiguration;
+                await Promise.race([whenDidChangeLaunchConfiguration, new Promise(resolve => setTimeout(resolve, 1000))]);
             }
         });
 
@@ -317,7 +305,7 @@ function testSuite({
             assert.deepEqual(expectation, JSON.parse(JSON.stringify(config)));
         });
 
-        test('undefind', () => {
+        test('undefined', () => {
             const config = vscode.workspace.getConfiguration('launch', undefined);
             assert.deepEqual(expectation, JSON.parse(JSON.stringify(config)));
         });
@@ -380,6 +368,86 @@ function testSuite({
                 });
             }
             assert.deepEqual(inspectExpectation, JSON.parse(JSON.stringify(inspect)));
+        });
+
+        test('update launch', async () => {
+            const config = vscode.workspace.getConfiguration();
+            await config.update('launch', validLaunch);
+            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
+            const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
+            assert.deepStrictEqual(validLaunch, actual);
+        });
+
+        test('update launch Global', async () => {
+            const config = vscode.workspace.getConfiguration();
+            try {
+                await config.update('launch', validLaunch, vscode.ConfigurationTarget.Global);
+                assert.fail('should not be possible to update User Settings');
+            } catch (e) {
+                assert.deepStrictEqual(e.message, 'Unable to write to User Settings because undefined does not support for global scope.');
+            }
+        });
+
+        test('update launch Workspace', async () => {
+            const config = vscode.workspace.getConfiguration();
+            await config.update('launch', validLaunch, vscode.ConfigurationTarget.Workspace);
+            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
+            const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
+            assert.deepStrictEqual(validLaunch, actual);
+        });
+
+        test('update launch WorkspaceFolder', async () => {
+            const config = vscode.workspace.getConfiguration();
+            try {
+                await config.update('launch', validLaunch, vscode.ConfigurationTarget.WorkspaceFolder);
+                assert.fail('should not be possible to update Workspace Folder Without resource');
+            } catch (e) {
+                assert.deepStrictEqual(e.message, 'Unable to write to Folder Settings because no resource is provided.');
+            }
+        });
+
+        test('update launch WorkspaceFolder with resource', async () => {
+            const config = vscode.workspace.getConfiguration(undefined, rootUri);
+            await config.update('launch', validLaunch, vscode.ConfigurationTarget.WorkspaceFolder);
+            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
+            const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
+            assert.deepStrictEqual(validLaunch, actual);
+        });
+
+        if (!Array.isArray(launch)) { // Error: Can not add index to parent of type array
+            test('update launch.configurations', async () => {
+                const config = vscode.workspace.getConfiguration();
+                await config.update('launch.configurations', [validConfiguration, validConfiguration2]);
+                const configPath = fs.existsSync(launchPath) ? launchPath : settingsPath;
+                const actual = JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' }));
+                assert.deepStrictEqual({
+                    ...launch,
+                    configurations: [validConfiguration, validConfiguration2]
+                }, actual);
+            });
+
+            test('update configurations', async () => {
+                /* 
+                 * without rootUri:
+                 * [undefined_publisher.vscode-launch] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'launch', provide the URI of a resource or 'null' for any resource.
+                 */
+                const config = vscode.workspace.getConfiguration('launch', rootUri);
+                await config.update('configurations', [validConfiguration, validConfiguration2]);
+                const configPath = fs.existsSync(launchPath) ? launchPath : settingsPath;
+                const actual = JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' }));
+                assert.deepStrictEqual({
+                    ...launch,
+                    configurations: [validConfiguration, validConfiguration2]
+                }, actual);
+            });
+        }
+
+        test('udpate delete', async () => {
+            const config = vscode.workspace.getConfiguration();
+            await config.update('launch', undefined);
+            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
+            const actual = fs.readFileSync(launchPath, { encoding: 'utf-8' });
+            assert.deepStrictEqual('', actual);
         });
 
     });
