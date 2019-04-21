@@ -414,7 +414,7 @@ function testSuite({
             assert.deepStrictEqual(validLaunch, actual);
         });
 
-        if (!Array.isArray(launch)) { // Error: Can not add index to parent of type array
+        if (!Array.isArray(launch)) {
             test('update launch.configurations', async () => {
                 const config = vscode.workspace.getConfiguration();
                 await config.update('launch.configurations', [validConfiguration, validConfiguration2]);
@@ -442,13 +442,25 @@ function testSuite({
             });
         }
 
-        test('udpate delete', async () => {
+        test('delete launch', async () => {
             const config = vscode.workspace.getConfiguration();
             await config.update('launch', undefined);
             assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
             const actual = fs.readFileSync(launchPath, { encoding: 'utf-8' });
             assert.deepStrictEqual('', actual);
         });
+
+        if (!Array.isArray(launch)) {
+            test('delete launch.configurations', async () => {
+                const config = vscode.workspace.getConfiguration();
+                await config.update('launch.configurations', undefined);
+                assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
+                const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
+                const expected = { ...launch };
+                delete expected['configurations'];
+                assert.deepStrictEqual(actual, expected);
+            });
+        }
 
     });
 
