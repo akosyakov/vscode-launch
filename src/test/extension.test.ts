@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 
-const defaultConfiguration = {
+const defaultLaunch = {
     "configurations": [],
     "compounds": []
 };
@@ -51,7 +51,7 @@ const settingsPath = rootUri.fsPath + '/.vscode/settings.json';
 
 testSuite({
     name: 'No Preferences',
-    expectation: defaultConfiguration
+    expectation: defaultLaunch
 });
 
 testLaunchAndSettingsSuite({
@@ -220,6 +220,35 @@ testSuite({
     }
 });
 
+testSuite({
+    name: 'Mixed Launch Without Configurations',
+    launch: {
+        "version": "0.2.0",
+        "compounds": [bogusCompound, bogusCompound2]
+    },
+    settings: {
+        launch: {
+            "version": "0.2.0",
+            "configurations": [validConfiguration2],
+            "compounds": [validCompound]
+        }
+    },
+    expectation: {
+        "version": "0.2.0",
+        "configurations": [validConfiguration2],
+        "compounds": [bogusCompound, bogusCompound2]
+    },
+    inspectExpectation: {
+        key: 'launch',
+        defaultValue: defaultLaunch,
+        workspaceValue: {
+            "version": "0.2.0",
+            "configurations": [validConfiguration2],
+            "compounds": [bogusCompound, bogusCompound2]
+        }
+    }
+});
+
 function testLaunchAndSettingsSuite({
     name, expectation, launch
 }: {
@@ -242,12 +271,13 @@ function testLaunchAndSettingsSuite({
 };
 
 function testSuite({
-    name, expectation, settings, launch
+    name, expectation, settings, launch, inspectExpectation
 }: {
     name: string,
     expectation: any,
     launch?: any,
-    settings?: any
+    settings?: any,
+    inspectExpectation?: any
 }): void {
 
     suite(name, () => {
@@ -323,33 +353,44 @@ function testSuite({
         test('inspect', () => {
             const config = vscode.workspace.getConfiguration();
             const inspect = config.inspect('launch');
-            const inspectExpectation = {
-                key: 'launch',
-                defaultValue: defaultConfiguration
-            };
-            const workspaceValue = launch || settings && settings.launch;
-            if (workspaceValue !== undefined) {
-                Object.assign(inspectExpectation, { workspaceValue });
+            let expected = inspectExpectation;
+            if (!expected) {
+                expected = {
+                    key: 'launch',
+                    defaultValue: defaultLaunch
+                };
+                const workspaceValue = launch || settings && settings.launch;
+                if (workspaceValue !== undefined) {
+                    Object.assign(expected, { workspaceValue });
+                }
             }
-            assert.deepEqual(inspectExpectation, JSON.parse(JSON.stringify(inspect)));
+            assert.deepEqual(JSON.parse(JSON.stringify(inspect)), expected);
         });
 
         test('inspect configurations', () => {
             const config = vscode.workspace.getConfiguration('launch', rootUri);
             const inspect = config.inspect('configurations');
-            const inspectExpectation = {
+
+            let expected = {
                 key: 'launch.configurations',
-                defaultValue: defaultConfiguration.configurations
+                defaultValue: defaultLaunch.configurations
             };
-            const value = launch || settings && settings.launch;
-            const configurations = !!value && 'configurations' in value ? value.configurations : undefined;
-            if (configurations !== undefined) {
-                Object.assign(inspectExpectation, {
-                    workspaceValue: configurations,
-                    workspaceFolderValue: configurations
+            if (inspectExpectation) {
+                Object.assign(expected, {
+                    workspaceValue: inspectExpectation.workspaceValue.configurations,
+                    workspaceFolderValue: inspectExpectation.workspaceValue.configurations
                 });
+            } else {
+                const value = launch || settings && settings.launch;
+                const configurations = !!value && 'configurations' in value ? value.configurations : undefined;
+                if (configurations !== undefined) {
+                    Object.assign(expected, {
+                        workspaceValue: configurations,
+                        workspaceFolderValue: configurations
+                    });
+                }
             }
-            assert.deepEqual(inspectExpectation, JSON.parse(JSON.stringify(inspect)));
+            assert.deepEqual(JSON.parse(JSON.stringify(inspect)), expected);
         });
 
         test('inspect compounds', () => {
@@ -357,7 +398,7 @@ function testSuite({
             const inspect = config.inspect('compounds');
             const inspectExpectation = {
                 key: 'launch.compounds',
-                defaultValue: defaultConfiguration.compounds
+                defaultValue: defaultLaunch.compounds
             };
             const value = launch || settings && settings.launch;
             const compounds = !!value && 'compounds' in value ? value.compounds : undefined;
@@ -445,9 +486,8 @@ function testSuite({
         test('delete launch', async () => {
             const config = vscode.workspace.getConfiguration();
             await config.update('launch', undefined);
-            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
-            const actual = fs.readFileSync(launchPath, { encoding: 'utf-8' });
-            assert.deepStrictEqual('', actual);
+            const actual = config.inspect('launch');
+            assert.deepStrictEqual(actual && actual.workspaceValue, settings ? settings['launch'] : undefined);
         });
 
         if (!Array.isArray(launch)) {
@@ -455,10 +495,32 @@ function testSuite({
                 const config = vscode.workspace.getConfiguration();
                 await config.update('launch.configurations', undefined);
                 assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
-                const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
-                const expected = { ...launch };
-                delete expected['configurations'];
-                assert.deepStrictEqual(actual, expected);
+
+                const actual = config.inspect('launch');
+                const actualWorkspaceValue = actual && actual.workspaceValue;
+
+                let expected = undefined;
+                if (launch) {
+                    expected = { ...launch };
+                    delete expected['configurations'];
+                }
+                if (settings) {
+                    let settingsLaunch = undefined;
+                    if (typeof settings['launch'] === 'object' && !Array.isArray(settings['launch']) && settings['launch'] !== null) {
+                        settingsLaunch = settings['launch'];
+                    } else {
+                        settingsLaunch = expectation;
+                    }
+                    if (expected) {
+                        if (settingsLaunch.configurations !== undefined) {
+                            expected.configurations = settingsLaunch.configurations;
+                        }
+                    } else {
+                        expected = settingsLaunch;
+                    }
+                }
+
+                assert.deepStrictEqual(actualWorkspaceValue, expected);
             });
         }
 
