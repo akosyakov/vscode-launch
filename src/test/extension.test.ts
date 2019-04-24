@@ -1,6 +1,7 @@
+import * as path from 'path';
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import * as fs from 'fs';
+import * as fs from 'fs-extra';
 
 const defaultLaunch = {
     "configurations": [],
@@ -46,8 +47,9 @@ const validLaunch = {
 };
 
 const rootUri = vscode.workspace.workspaceFolders![0].uri;
-const launchPath = rootUri.fsPath + '/.vscode/launch.json';
-const settingsPath = rootUri.fsPath + '/.vscode/settings.json';
+const confPath = path.join(rootUri.fsPath, '.vscode');
+const launchPath = path.join(confPath, 'launch.json');
+const settingsPath = path.join(confPath, 'settings.json');
 
 testSuite({
     name: 'No Preferences',
@@ -252,10 +254,10 @@ testSuite({
 function testLaunchAndSettingsSuite({
     name, expectation, launch
 }: {
-    name: string,
-    expectation: any,
-    launch?: any
-}): void {
+        name: string,
+        expectation: any,
+        launch?: any
+    }): void {
     testSuite({
         name: name + ' Launch Configuration',
         launch,
@@ -273,71 +275,45 @@ function testLaunchAndSettingsSuite({
 function testSuite({
     name, expectation, settings, launch, inspectExpectation
 }: {
-    name: string,
-    expectation: any,
-    launch?: any,
-    settings?: any,
-    inspectExpectation?: any
-}): void {
+        name: string,
+        expectation: any,
+        launch?: any,
+        settings?: any,
+        inspectExpectation?: any
+    }): void {
 
     suite(name, () => {
 
-        const cleanUp = () => {
-            let r = false;
-            try {
-                if (fs.existsSync(launchPath)) {
-                    fs.unlinkSync(launchPath);
-                    r = true;
-                }
-            } catch { /*no-op*/ }
-            try {
-                if (fs.existsSync(settingsPath)) {
-                    fs.unlinkSync(settingsPath);
-                    r = true;
-                }
-            } catch { /*no-op*/ }
-            return r;
-        };
+        const settingsLaunch = settings ? settings['launch'] : undefined;
 
         setup(async function () {
-            const whenDidChangeLaunchConfiguration = new Promise(resolve => vscode.workspace.onDidChangeConfiguration(e => {
-                if (e.affectsConfiguration('launch')) {
-                    resolve();
-                }
-            }));
-            let r = cleanUp();
+            this.timeout(2500);
+            fs.emptyDirSync(rootUri.fsPath);
+            fs.ensureDirSync(confPath);
             if (settings) {
                 fs.writeFileSync(settingsPath, JSON.stringify(settings), 'utf-8');
-                r = true;
             }
             if (launch) {
                 fs.writeFileSync(launchPath, JSON.stringify(launch), 'utf-8');
-                r = true;
             }
-            if (r) {
-                await whenDidChangeLaunchConfiguration;
-            }
-        });
-
-        teardown(async function () {
-            const whenDidChangeLaunchConfiguration = new Promise(resolve => vscode.workspace.onDidChangeConfiguration(e => {
-                if (e.affectsConfiguration('launch')) {
-                    resolve();
-                }
-            }));
-            if (cleanUp()) {
-                await Promise.race([whenDidChangeLaunchConfiguration, new Promise(resolve => setTimeout(resolve, 1000))]);
-            }
+            await Promise.race([new Promise(resolve => {
+                const listener = vscode.workspace.onDidChangeConfiguration(e => {
+                    if (e.affectsConfiguration('launch')) {
+                        listener.dispose();
+                        resolve();
+                    }
+                });
+            }), new Promise(resolve => setTimeout(resolve, 2000))]);
         });
 
         test('default', () => {
             const config = vscode.workspace.getConfiguration('launch');
-            assert.deepEqual(expectation, JSON.parse(JSON.stringify(config)));
+            assert.deepEqual(JSON.parse(JSON.stringify(config)), expectation);
         });
 
         test('undefined', () => {
             const config = vscode.workspace.getConfiguration('launch', undefined);
-            assert.deepEqual(expectation, JSON.parse(JSON.stringify(config)));
+            assert.deepEqual(JSON.parse(JSON.stringify(config)), expectation);
         });
 
         test('null', () => {
@@ -414,72 +390,78 @@ function testSuite({
         test('update launch', async () => {
             const config = vscode.workspace.getConfiguration();
             await config.update('launch', validLaunch);
-            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
-            const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
-            assert.deepStrictEqual(validLaunch, actual);
+
+            const inspect = config.inspect('launch');
+            const actual = inspect && inspect.workspaceValue;
+            const expected = settingsLaunch && !Array.isArray(settingsLaunch) ? { ...settingsLaunch, ...validLaunch } : validLaunch;
+            assert.deepStrictEqual(actual, expected);
         });
 
         test('update launch Global', async () => {
             const config = vscode.workspace.getConfiguration();
             try {
                 await config.update('launch', validLaunch, vscode.ConfigurationTarget.Global);
-                assert.fail('should not be possible to update User Settings');
-            } catch (e) {
-                assert.deepStrictEqual(e.message, 'Unable to write to User Settings because undefined does not support for global scope.');
+                assert.ok(false);
+            } catch {
+                assert.ok(true);
             }
         });
 
         test('update launch Workspace', async () => {
             const config = vscode.workspace.getConfiguration();
             await config.update('launch', validLaunch, vscode.ConfigurationTarget.Workspace);
-            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
-            const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
-            assert.deepStrictEqual(validLaunch, actual);
+
+            const inspect = config.inspect('launch');
+            const actual = inspect && inspect.workspaceValue;
+            const expected = settingsLaunch && !Array.isArray(settingsLaunch) ? { ...settingsLaunch, ...validLaunch } : validLaunch;
+            assert.deepStrictEqual(actual, expected);
         });
 
         test('update launch WorkspaceFolder', async () => {
             const config = vscode.workspace.getConfiguration();
             try {
                 await config.update('launch', validLaunch, vscode.ConfigurationTarget.WorkspaceFolder);
-                assert.fail('should not be possible to update Workspace Folder Without resource');
-            } catch (e) {
-                assert.deepStrictEqual(e.message, 'Unable to write to Folder Settings because no resource is provided.');
+                assert.ok(false);
+            } catch {
+                assert.ok(true);
             }
         });
 
         test('update launch WorkspaceFolder with resource', async () => {
             const config = vscode.workspace.getConfiguration(undefined, rootUri);
             await config.update('launch', validLaunch, vscode.ConfigurationTarget.WorkspaceFolder);
-            assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
-            const actual = JSON.parse(fs.readFileSync(launchPath, { encoding: 'utf-8' }));
-            assert.deepStrictEqual(validLaunch, actual);
+
+            const inspect = config.inspect('launch');
+            const actual = inspect && inspect.workspaceValue;
+            const expected = settingsLaunch && !Array.isArray(settingsLaunch) ? { ...settingsLaunch, ...validLaunch } : validLaunch;
+            assert.deepStrictEqual(actual, expected);
         });
 
         if (!Array.isArray(launch)) {
             test('update launch.configurations', async () => {
                 const config = vscode.workspace.getConfiguration();
                 await config.update('launch.configurations', [validConfiguration, validConfiguration2]);
-                const configPath = fs.existsSync(launchPath) ? launchPath : settingsPath;
-                const actual = JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' }));
-                assert.deepStrictEqual({
-                    ...launch,
+
+                const inspect = config.inspect('launch');
+                const actual = inspect && inspect.workspaceValue;
+                const expected = launch || (!Array.isArray(settingsLaunch) ? settingsLaunch : undefined);
+                assert.deepStrictEqual(actual, {
+                    ...expected,
                     configurations: [validConfiguration, validConfiguration2]
-                }, actual);
+                });
             });
 
             test('update configurations', async () => {
-                /* 
+                /*
                  * without rootUri:
                  * [undefined_publisher.vscode-launch] Accessing a resource scoped configuration without providing a resource is not expected. To get the effective value for 'launch', provide the URI of a resource or 'null' for any resource.
                  */
                 const config = vscode.workspace.getConfiguration('launch', rootUri);
                 await config.update('configurations', [validConfiguration, validConfiguration2]);
-                const configPath = fs.existsSync(launchPath) ? launchPath : settingsPath;
-                const actual = JSON.parse(fs.readFileSync(configPath, { encoding: 'utf-8' }));
-                assert.deepStrictEqual({
-                    ...launch,
-                    configurations: [validConfiguration, validConfiguration2]
-                }, actual);
+
+                const inspect = config.inspect('configurations');
+                const actual = inspect && inspect.workspaceValue;
+                assert.deepStrictEqual(actual, [validConfiguration, validConfiguration2]);
             });
         }
 
@@ -490,11 +472,10 @@ function testSuite({
             assert.deepStrictEqual(actual && actual.workspaceValue, settings ? settings['launch'] : undefined);
         });
 
-        if (!Array.isArray(launch)) {
+        if ((launch && !Array.isArray(launch)) || (settingsLaunch && !Array.isArray(settingsLaunch))) {
             test('delete launch.configurations', async () => {
                 const config = vscode.workspace.getConfiguration();
                 await config.update('launch.configurations', undefined);
-                assert.ok(fs.existsSync(launchPath), 'launch.json should exist');
 
                 const actual = config.inspect('launch');
                 const actualWorkspaceValue = actual && actual.workspaceValue;
